@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WebSocket Draw - Kollaboratives Malen</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <h1>WebSocket Draw</h1>
+        <div class="room-info">
+          <div id="room-status">Kein Raum beigetreten</div>
+          <div id="user-count">Benutzer: 0</div>
+        </div>
+      </header>
+
+      <div class="main-content">
+        <div class="sidebar">
+          <div class="room-controls">
+            <button id="create-room-btn">Neuen Raum erstellen</button>
+            <div class="join-room">
+              <input
+                type="text"
+                id="room-id-input"
+                placeholder="Raum-ID eingeben"
+              />
+              <button id="join-room-btn">Raum beitreten</button>
+            </div>
+            <div id="current-room" class="current-room"></div>
+          </div>
+
+          <div class="user-settings">
+            <h3>Benutzer-Einstellungen</h3>
+            <div class="tool-group">
+              <label>Name:</label>
+              <input
+                type="text"
+                id="username-input"
+                placeholder="Dein Name"
+                maxlength="20"
+              />
+            </div>
+            <div class="tool-group">
+              <label>Farbe:</label>
+              <input type="color" id="user-color-picker" value="#ff6b6b" />
+            </div>
+          </div>
+
+          <div class="drawing-tools">
+            <h3>Zeichen-Tools</h3>
+            <div class="tool-group">
+              <label>Farbe:</label>
+              <input type="color" id="color-picker" value="#000000" />
+            </div>
+            <div class="tool-group">
+              <label>Größe:</label>
+              <input type="range" id="brush-size" min="1" max="200" value="5" />
+              <span id="brush-size-value">5</span>
+            </div>
+            <div class="tool-group">
+              <button id="clear-canvas">Canvas leeren</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="canvas-container">
+          <canvas id="drawing-canvas" width="800" height="600"></canvas>
+          <div class="minimap-container">
+            <canvas id="minimap-canvas" width="300" height="200"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
