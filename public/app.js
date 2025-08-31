@@ -42,6 +42,9 @@ let lastPanY = 0; // Letzte Pan-Position Y
 // Unendliches Canvas
 const CANVAS_SIZE = 50000; // Virtuelle Canvas-Größe
 
+// Fullscreen Mode
+let isFullscreenMode = false;
+
 // Canvas initialisieren und skalieren
 function resizeCanvas() {
   const canvas = document.getElementById("drawing-canvas");
@@ -174,11 +177,11 @@ function handleRoomCreated(roomId) {
 function updateRoomDisplay() {
   if (currentRoom) {
     roomStatusDiv.textContent = `Raum: ${currentRoom}`;
-    currentRoomDiv.textContent = `Teile diese ID: ${currentRoom}`;
     roomIdInput.value = currentRoom;
+    updateShareLink();
   } else {
     roomStatusDiv.textContent = "Kein Raum beigetreten";
-    currentRoomDiv.textContent = "";
+    updateShareLink();
   }
 }
 
@@ -190,6 +193,9 @@ function updateBrushSettings() {
   ctx.strokeStyle = colorPicker.value;
   ctx.lineWidth = brushSize.value;
   brushSizeValue.textContent = brushSize.value;
+
+  // Lokalen Cursor-Größe aktualisieren
+  updateCursorSize();
 }
 
 function getMousePos(e) {
@@ -573,8 +579,21 @@ function handleZoom(e) {
   if (newScale !== scale) {
     // Berechne neuen Offset, um Zoom um Mausposition zu zentrieren
     const scaleChange = newScale / scale;
-    offsetX = mousePos.x - (mousePos.x - offsetX) * scaleChange;
-    offsetY = mousePos.y - (mousePos.y - offsetY) * scaleChange;
+    let newOffsetX = mousePos.x - (mousePos.x - offsetX) * scaleChange;
+    let newOffsetY = mousePos.y - (mousePos.y - offsetY) * scaleChange;
+
+    // Grenzen für das Scrolling nach Zoom berechnen
+    const maxOffsetX = CANVAS_SIZE * newScale - canvas.width / 2;
+    const minOffsetX = -CANVAS_SIZE * newScale + canvas.width / 2;
+    const maxOffsetY = CANVAS_SIZE * newScale - canvas.height / 2;
+    const minOffsetY = -CANVAS_SIZE * newScale + canvas.height / 2;
+
+    // Offset-Werte begrenzen
+    newOffsetX = Math.max(minOffsetX, Math.min(maxOffsetX, newOffsetX));
+    newOffsetY = Math.max(minOffsetY, Math.min(maxOffsetY, newOffsetY));
+
+    offsetX = newOffsetX;
+    offsetY = newOffsetY;
     scale = newScale;
 
     redrawCanvas();
@@ -598,13 +617,29 @@ function handlePanMove(e) {
   const deltaX = e.clientX - lastPanX;
   const deltaY = e.clientY - lastPanY;
 
-  offsetX += deltaX;
-  offsetY += deltaY;
+  // Neue Offset-Werte berechnen
+  let newOffsetX = offsetX + deltaX;
+  let newOffsetY = offsetY + deltaY;
+
+  // Grenzen für das Scrolling berechnen
+  const maxOffsetX = CANVAS_SIZE * scale - canvas.width / 2;
+  const minOffsetX = -CANVAS_SIZE * scale + canvas.width / 2;
+  const maxOffsetY = CANVAS_SIZE * scale - canvas.height / 2;
+  const minOffsetY = -CANVAS_SIZE * scale + canvas.height / 2;
+
+  // Offset-Werte begrenzen
+  newOffsetX = Math.max(minOffsetX, Math.min(maxOffsetX, newOffsetX));
+  newOffsetY = Math.max(minOffsetY, Math.min(maxOffsetY, newOffsetY));
+
+  // Nur aktualisieren wenn sich etwas geändert hat
+  if (newOffsetX !== offsetX || newOffsetY !== offsetY) {
+    offsetX = newOffsetX;
+    offsetY = newOffsetY;
+    redrawCanvas();
+  }
 
   lastPanX = e.clientX;
   lastPanY = e.clientY;
-
-  redrawCanvas();
 }
 
 function handlePanEnd(e) {
@@ -786,14 +821,37 @@ function handleMinimapClick(e) {
     ) * 0.95;
 
   // Klick-Position in Welt-Koordinaten umwandeln
+  // Minimap ist zentriert, also müssen wir vom Zentrum aus rechnen
   const worldX = (clickX - minimapCanvas.width / 2) / mapScale;
   const worldY = (clickY - minimapCanvas.height / 2) / mapScale;
 
   // Viewport zu dieser Position bewegen
-  offsetX = -worldX * scale + canvas.width / 2;
-  offsetY = -worldY * scale + canvas.height / 2;
+  // Neue Formel: offsetX = -worldX * scale + canvas.width / 2
+  // Neue Formel: offsetY = -worldY * scale + canvas.height / 2
+  let newOffsetX = -worldX * scale + canvas.width / 2;
+  let newOffsetY = -worldY * scale + canvas.height / 2;
 
-  redrawCanvas();
+  // Grenzen für das Scrolling berechnen
+  const maxOffsetX = CANVAS_SIZE * scale - canvas.width / 2;
+  const minOffsetX = -CANVAS_SIZE * scale + canvas.width / 2;
+  const maxOffsetY = CANVAS_SIZE * scale - canvas.height / 2;
+  const minOffsetY = -CANVAS_SIZE * scale + canvas.height / 2;
+
+  // Offset-Werte begrenzen
+  newOffsetX = Math.max(minOffsetX, Math.min(maxOffsetX, newOffsetX));
+  newOffsetY = Math.max(minOffsetY, Math.min(maxOffsetY, newOffsetY));
+
+  // Nur aktualisieren wenn sich etwas geändert hat
+  if (newOffsetX !== offsetX || newOffsetY !== offsetY) {
+    offsetX = newOffsetX;
+    offsetY = newOffsetY;
+
+    console.log(
+      `Minimap-Klick: (${clickX}, ${clickY}) -> Welt: (${worldX}, ${worldY}) -> Offset: (${offsetX}, ${offsetY})`
+    );
+
+    redrawCanvas();
+  }
 }
 
 // Minimap nach jedem redrawCanvas aktualisieren
@@ -1018,8 +1076,70 @@ function stopUserInfoBroadcast() {
   }
 }
 
+// Fullscreen Funktionalität
+function toggleFullscreen() {
+  const container = document.querySelector(".container");
+  const fullscreenBtn = document.getElementById("fullscreen-toggle");
+  const overlayBtn = document.getElementById("fullscreen-overlay-btn");
+
+  isFullscreenMode = !isFullscreenMode;
+
+  if (isFullscreenMode) {
+    container.classList.add("fullscreen-mode");
+    fullscreenBtn.classList.add("active");
+    overlayBtn.classList.add("visible");
+  } else {
+    container.classList.remove("fullscreen-mode");
+    fullscreenBtn.classList.remove("active");
+    overlayBtn.classList.remove("visible");
+  }
+
+  // Zustand im localStorage speichern
+  localStorage.setItem("websocketDrawFullscreen", isFullscreenMode);
+
+  console.log(
+    `🔄 Fullscreen-Modus: ${isFullscreenMode ? "aktiviert" : "deaktiviert"}`
+  );
+}
+
+// Fullscreen-Button Event Listener
+document
+  .getElementById("fullscreen-toggle")
+  .addEventListener("click", toggleFullscreen);
+
+// Fullscreen Overlay Button Event Listener
+document
+  .getElementById("fullscreen-overlay-btn")
+  .addEventListener("click", toggleFullscreen);
+
+// Keyboard shortcuts für Fullscreen
+document.addEventListener("keydown", (e) => {
+  // Escape-Taste für Fullscreen verlassen
+  if (e.key === "Escape" && isFullscreenMode) {
+    toggleFullscreen();
+  }
+  // F11 für Fullscreen umschalten
+  if (e.key === "F11") {
+    e.preventDefault();
+    toggleFullscreen();
+  }
+});
+
+// Gespeicherten Fullscreen-Zustand laden
+function loadFullscreenState() {
+  const savedFullscreen = localStorage.getItem("websocketDrawFullscreen");
+  if (savedFullscreen === "true") {
+    isFullscreenMode = true;
+    document.querySelector(".container").classList.add("fullscreen-mode");
+    document.getElementById("fullscreen-toggle").classList.add("active");
+    document.getElementById("fullscreen-overlay-btn").classList.add("visible");
+    console.log("🔄 Fullscreen-Modus aus localStorage wiederhergestellt");
+  }
+}
+
 // Benutzer-Einstellungen beim Start laden
 loadUserSettings();
+loadFullscreenState();
 
 // Raum-ID aus localStorage laden und beitreten (nachdem Benutzer-Einstellungen geladen sind)
 setTimeout(() => {
@@ -1044,8 +1164,139 @@ setTimeout(() => {
   }
 }, 200); // Mehr Zeit für localStorage-Loading
 
+// Lokaler Cursor für Pinselgröße-Indikator
+let localCursor = null;
+
+function createLocalCursor() {
+  if (localCursor) return; // Bereits vorhanden
+
+  localCursor = document.createElement("div");
+  localCursor.className = "local-cursor";
+  localCursor.id = "local-cursor";
+
+  // Cursor-Icon mit Größen-Indikator
+  localCursor.innerHTML = `
+    <div class="cursor-size-indicator"></div>
+    <svg width="20" height="20" viewBox="0 0 20 20">
+      <polygon points="5,5 15,10 5,15" fill="#000" stroke="#fff" stroke-width="1"/>
+    </svg>
+  `;
+
+  document.body.appendChild(localCursor);
+  updateCursorSize(); // Initiale Größe setzen
+}
+
+function updateCursorSize() {
+  if (!localCursor) return;
+
+  const brushSize = parseInt(brushSize.value) || 5;
+  const sizeIndicator = localCursor.querySelector(".cursor-size-indicator");
+
+  // Skaliere den Größen-Indikator basierend auf der Pinselgröße
+  // Minimum 10px, Maximum 100px für gute Sichtbarkeit
+  const indicatorSize = Math.max(10, Math.min(100, brushSize * 2));
+
+  sizeIndicator.style.width = `${indicatorSize}px`;
+  sizeIndicator.style.height = `${indicatorSize}px`;
+  sizeIndicator.style.borderWidth = `${Math.max(1, brushSize / 10)}px`;
+
+  console.log(
+    `🎨 Pinselgröße aktualisiert: ${brushSize}px, Indikator: ${indicatorSize}px`
+  );
+}
+
+// Maus-Tracking für lokalen Cursor
+document.addEventListener("mousemove", (e) => {
+  if (!localCursor) return;
+
+  // Positioniere lokalen Cursor an Mausposition
+  localCursor.style.left = `${e.clientX}px`;
+  localCursor.style.top = `${e.clientY}px`;
+
+  // Zeige/verstecke Cursor basierend auf Canvas-Position
+  const canvas = document.getElementById("drawing-canvas");
+  const rect = canvas.getBoundingClientRect();
+
+  if (
+    e.clientX >= rect.left &&
+    e.clientX <= rect.right &&
+    e.clientY >= rect.top &&
+    e.clientY <= rect.bottom
+  ) {
+    localCursor.style.opacity = "1";
+  } else {
+    localCursor.style.opacity = "0.3";
+  }
+});
+
+// Lokalen Cursor erstellen
+createLocalCursor();
+
 // Initiale Brush-Einstellungen
 updateBrushSettings();
+
+// Copy to Clipboard Funktion
+async function copyToClipboard(text) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      // Moderne Clipboard API
+      await navigator.clipboard.writeText(text);
+      return true;
+    } else {
+      // Fallback für ältere Browser
+      const textArea = document.createElement("textarea");
+      textArea.value = text;
+      textArea.style.position = "fixed";
+      textArea.style.left = "-999999px";
+      textArea.style.top = "-999999px";
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+
+      const success = document.execCommand("copy");
+      textArea.remove();
+
+      return success;
+    }
+  } catch (err) {
+    console.error("Fehler beim Kopieren:", err);
+    return false;
+  }
+}
+
+// Share Link Funktionalität
+function updateShareLink() {
+  const roomIdDisplay = document.getElementById("room-id-display");
+  const shareLink = document.getElementById("share-link");
+
+  if (currentRoom) {
+    roomIdDisplay.textContent = currentRoom;
+    shareLink.style.display = "block";
+  } else {
+    roomIdDisplay.textContent = "";
+    shareLink.style.display = "none";
+  }
+}
+
+async function copyShareLink() {
+  if (!currentRoom) {
+    console.log("❌ Kein Raum zum Teilen verfügbar");
+    return;
+  }
+
+  const shareUrl = `${window.location.origin}${window.location.pathname}?room=${currentRoom}`;
+
+  const success = await copyToClipboard(shareUrl);
+
+  if (success) {
+    console.log(`🔗 Link erfolgreich kopiert: ${shareUrl}`);
+  } else {
+    console.log("❌ Fehler beim Kopieren des Links");
+  }
+}
+
+// Event Listener für Share-Funktionalität
+document.getElementById("share-link").addEventListener("click", copyShareLink);
 
 // Broadcasting stoppen wenn Seite verlassen wird
 window.addEventListener("beforeunload", () => {

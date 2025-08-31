@@ -42,10 +42,37 @@ header h1 {
   margin: 0;
 }
 
+.fullscreen-btn {
+  background: #667eea;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  width: 36px;
+  height: 36px;
+  cursor: pointer;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  margin-left: auto;
+}
+
+.fullscreen-btn:hover {
+  background: #5a67d8;
+  transform: scale(1.05);
+}
+
+.fullscreen-btn:active {
+  background: #4c51bf;
+  transform: scale(0.95);
+}
+
 .room-info {
   display: flex;
   gap: 15px;
   align-items: center;
+  margin-left: auto;
 }
 
 .room-info div {
@@ -143,6 +170,16 @@ header h1 {
   font-size: 12px;
   word-break: break-all;
   border: 1px solid #e2e8f0;
+}
+
+#share-link {
+  cursor: pointer;
+  user-select: none;
+  display: block;
+}
+
+#share-link:hover {
+  color: #667eea;
 }
 
 .user-settings {
@@ -264,7 +301,7 @@ header h1 {
 #drawing-canvas {
   width: 100%;
   height: 100%;
-  cursor: crosshair;
+  cursor: none;
   background: white;
   display: block;
 }
@@ -273,7 +310,7 @@ header h1 {
   position: absolute;
   bottom: 20px;
   right: 20px;
-  width: 300px;
+  width: 200px;
   height: 200px;
   background: rgba(255, 255, 255, 0.95);
   border-radius: 8px;
@@ -338,6 +375,33 @@ header h1 {
   }
 }
 
+/* Lokaler Cursor für Pinselgröße-Indikator */
+.local-cursor {
+  position: absolute;
+  pointer-events: none;
+  z-index: 10000;
+  transform: translate(-10px, -10px);
+  transition: opacity 0.2s ease;
+}
+
+.cursor-size-indicator {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  border: 2px solid rgba(0, 0, 0, 0.8);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  pointer-events: none;
+  box-sizing: border-box;
+}
+
+.local-cursor svg {
+  position: relative;
+  z-index: 1;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+}
+
 /* Remote Cursor Styles */
 .remote-cursor {
   position: absolute;
@@ -394,4 +458,97 @@ header h1 {
 
 .remote-cursor:hover {
   animation: cursor-pulse 1s ease-in-out infinite;
+}
+
+/* Fullscreen Mode Styles */
+.fullscreen-mode .sidebar {
+  transform: translateX(-320px);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.fullscreen-mode #main-header {
+  transform: translateY(-80px);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.fullscreen-mode .minimap-container {
+  bottom: 20px;
+  right: 20px;
+}
+
+.fullscreen-mode #drawing-canvas {
+  cursor: crosshair;
+}
+
+/* Smooth transitions for fullscreen toggle */
+.sidebar,
+#main-header {
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.minimap-container {
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Fullscreen toggle button states */
+.fullscreen-btn.active {
+  background: #48bb78;
+}
+
+.fullscreen-btn.active:hover {
+  background: #38a169;
+}
+
+.fullscreen-btn.active::before {
+  content: "⛶";
+  transform: rotate(180deg);
+}
+
+/* Fullscreen overlay button */
+.fullscreen-overlay-btn {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background: rgba(102, 126, 234, 0.9);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  width: 50px;
+  height: 50px;
+  cursor: pointer;
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  z-index: 9999;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.fullscreen-overlay-btn.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.fullscreen-overlay-btn:hover {
+  background: rgba(90, 103, 216, 0.9);
+  transform: scale(1.1);
+}
+
+.fullscreen-overlay-btn:active {
+  background: rgba(76, 81, 191, 0.9);
+  transform: scale(0.95);
+}
+
+.fullscreen-overlay-btn.active {
+  background: rgba(72, 187, 120, 0.9);
+}
+
+.fullscreen-overlay-btn.active:hover {
+  background: rgba(56, 161, 105, 0.9);
 }

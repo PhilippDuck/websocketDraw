@@ -8,12 +8,19 @@
   </head>
   <body>
     <div class="container">
-      <header>
+      <header id="main-header">
         <h1>WebSocket Draw</h1>
         <div class="room-info">
           <div id="room-status">Kein Raum beigetreten</div>
           <div id="user-count">Benutzer: 0</div>
         </div>
+        <button
+          id="fullscreen-toggle"
+          class="fullscreen-btn"
+          title="Vollbildmodus umschalten"
+        >
+          ⛶
+        </button>
       </header>
 
       <div class="main-content">
@@ -28,7 +35,11 @@
               />
               <button id="join-room-btn">Raum beitreten</button>
             </div>
-            <div id="current-room" class="current-room"></div>
+            <div id="current-room" class="current-room">
+              <span id="share-link"
+                >Teile diese ID: <span id="room-id-display"></span
+              ></span>
+            </div>
           </div>
 
           <div class="user-settings">
@@ -73,6 +84,15 @@
         </div>
       </div>
     </div>
+
+    <!-- Fullscreen Overlay Button -->
+    <button
+      id="fullscreen-overlay-btn"
+      class="fullscreen-overlay-btn"
+      title="Vollbildmodus umschalten"
+    >
+      ⛶
+    </button>
 
     <script src="/socket.io/socket.io.js"></script>
     <script src="app.js"></script>
