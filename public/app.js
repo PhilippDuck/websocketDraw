@@ -124,6 +124,7 @@ socket.on("user-infos", handleUserInfos);
 socket.on("user-joined", handleUserJoined);
 socket.on("user-info-update", handleUserJoined); // Gleiche Behandlung wie user-joined
 socket.on("clear-canvas", handleRemoteClear);
+socket.on("disconnect", handleDisconnect);
 
 // Funktionen
 function createRoom() {
@@ -207,12 +208,18 @@ function updateRoomDisplay() {
 }
 
 function handleUserCount(count) {
-  // Benutzerzahl aus der lokalen Liste berechnen statt Server-Event zu verwenden
+  // Immer die lokale Benutzerliste verwenden für konsistente Anzeige
   const actualCount = currentUsers.size;
   userCountDiv.textContent = `Benutzer: ${actualCount}`;
-  console.log(
-    `👥 Benutzerzahl aktualisiert: ${actualCount} (Server sagte: ${count})`
-  );
+
+  // Nur loggen wenn es eine Diskrepanz gibt
+  if (actualCount !== count) {
+    console.log(
+      `👥 Benutzerzahl korrigiert: ${actualCount} (Server sagte: ${count})`
+    );
+  } else {
+    console.log(`👥 Benutzerzahl: ${actualCount}`);
+  }
 }
 
 function updateBrushSettings() {
@@ -1399,12 +1406,28 @@ function addUser(userId, username, color) {
 
 function removeUser(userId) {
   currentUsers.delete(userId);
+  cursorPositions.delete(userId); // Auch Cursor-Position entfernen
   updateUserList();
+  // Zähler aktualisieren
+  const actualCount = currentUsers.size;
+  userCountDiv.textContent = `Benutzer: ${actualCount}`;
+  console.log(`👥 Benutzer ${userId} entfernt. Neue Anzahl: ${actualCount}`);
 }
 
 function clearUserList() {
   currentUsers.clear();
   updateUserList();
+}
+
+function handleDisconnect() {
+  console.log("🔌 Verbindung zum Server verloren");
+  // Raum verlassen und alles zurücksetzen
+  currentRoom = null;
+  clearUserList();
+  clearAllCursors();
+  stopUserInfoBroadcast();
+  updateRoomDisplay();
+  console.log("🔄 Verbindung verloren - alles zurückgesetzt");
 }
 
 // Broadcasting stoppen wenn Seite verlassen wird
