@@ -45,6 +45,12 @@ const CANVAS_SIZE = 50000; // Virtuelle Canvas-Größe
 // Fullscreen Mode
 let isFullscreenMode = false;
 
+// Benutzerliste
+let currentUsers = new Map(); // userId -> {username, color}
+
+// Cursor-Positionen (für "Springe zu Cursor" Funktion)
+let cursorPositions = new Map(); // userId -> {x, y}
+
 // Canvas initialisieren und skalieren
 function resizeCanvas() {
   const canvas = document.getElementById("drawing-canvas");
@@ -143,6 +149,12 @@ function joinRoom() {
       color: userColor,
     });
     currentRoom = roomId;
+
+    // Sich selbst zur Benutzerliste hinzufügen (da Server nur andere Benutzer sendet)
+    currentUsers.set(socket.id, { username: username, color: userColor });
+    updateUserList();
+    console.log(`Sich selbst zur Benutzerliste hinzugefügt: ${username}`);
+
     // Raum-ID im localStorage speichern
     localStorage.setItem("websocketDrawRoomId", roomId);
     console.log(`✅ Raum-ID ${roomId} im localStorage gespeichert`);
@@ -169,6 +181,12 @@ function handleRoomCreated(roomId) {
     username: username,
     color: userColor,
   });
+
+  // Sich selbst zur Benutzerliste hinzufügen (da Server nur andere Benutzer sendet)
+  currentUsers.set(socket.id, { username: username, color: userColor });
+  updateUserList();
+  console.log(`Sich selbst zur Benutzerliste hinzugefügt: ${username}`);
+
   updateRoomDisplay();
   // URL mit Raum-ID aktualisieren
   window.history.pushState({}, "", `?room=${roomId}`);
@@ -182,20 +200,25 @@ function updateRoomDisplay() {
   } else {
     roomStatusDiv.textContent = "Kein Raum beigetreten";
     updateShareLink();
+    // Benutzerliste leeren und Broadcasting stoppen
+    clearUserList();
+    stopUserInfoBroadcast();
   }
 }
 
 function handleUserCount(count) {
-  userCountDiv.textContent = `Benutzer: ${count}`;
+  // Benutzerzahl aus der lokalen Liste berechnen statt Server-Event zu verwenden
+  const actualCount = currentUsers.size;
+  userCountDiv.textContent = `Benutzer: ${actualCount}`;
+  console.log(
+    `👥 Benutzerzahl aktualisiert: ${actualCount} (Server sagte: ${count})`
+  );
 }
 
 function updateBrushSettings() {
   ctx.strokeStyle = colorPicker.value;
   ctx.lineWidth = brushSize.value;
   brushSizeValue.textContent = brushSize.value;
-
-  // Lokalen Cursor-Größe aktualisieren
-  updateCursorSize();
 }
 
 function getMousePos(e) {
@@ -344,12 +367,30 @@ function handleCanvasData(data) {
 function handleUserInfos(data) {
   console.log("handleUserInfos aufgerufen mit Daten:", data);
 
-  if (!data || Object.keys(data).length === 0) {
-    console.log("Keine Benutzer-Infos empfangen");
-    return;
+  // Entferne ALLE anderen Benutzer (aber behalte den eigenen)
+  for (const [userId] of currentUsers) {
+    if (userId !== socket.id) {
+      currentUsers.delete(userId);
+      removeCursor(userId);
+    }
   }
 
-  // Für jeden Benutzer einen Cursor erstellen (falls noch nicht vorhanden)
+  // Füge die empfangenen Benutzer hinzu (nur andere Benutzer)
+  if (data && Object.keys(data).length > 0) {
+    for (const [userId, userInfo] of Object.entries(data)) {
+      if (userId !== socket.id && !currentUsers.has(userId)) {
+        currentUsers.set(userId, {
+          username: userInfo.username || "Anonymous",
+          color: userInfo.color || "#ff6b6b",
+        });
+      }
+    }
+  }
+
+  // UI aktualisieren
+  updateUserList();
+
+  // Cursor für jeden Benutzer erstellen/aktualisieren
   for (const [userId, userInfo] of Object.entries(data)) {
     console.log(`Verarbeite Benutzer ${userId}:`, userInfo);
 
@@ -408,6 +449,9 @@ function handleUserInfos(data) {
 function handleUserJoined(data) {
   const { userId, username, color } = data;
   console.log(`Neuer Benutzer beigetreten: ${userId}, ${username}, ${color}`);
+
+  // Nur Cursor erstellen/aktualisieren - Benutzerliste wird von handleUserInfos verwaltet
+  // Benutzer wird automatisch durch das nächste user-infos Event hinzugefügt
 
   if (!cursors.has(userId)) {
     // Neuen Cursor für den neuen Benutzer erstellen
@@ -965,6 +1009,8 @@ function handleCursorUpdate(data) {
     `Cursor-Update empfangen: ${userId}, ${x}, ${y}, ${username}, ${color}`
   );
 
+  // Nur Cursor-Updates - Benutzerliste wird von handleUserInfos verwaltet
+
   // Canvas-Position einmal berechnen
   const canvasRect = canvas.getBoundingClientRect();
 
@@ -1045,6 +1091,9 @@ function handleCursorUpdate(data) {
 
   cursor.style.left = `${newLeft}px`;
   cursor.style.top = `${newTop}px`;
+
+  // Cursor-Position für "Springe zu Cursor" Funktion speichern
+  cursorPositions.set(userId, { x: x, y: y });
 
   console.log(
     `Cursor ${
@@ -1141,6 +1190,9 @@ function loadFullscreenState() {
 loadUserSettings();
 loadFullscreenState();
 
+// Benutzerliste beim Start leeren
+clearUserList();
+
 // Raum-ID aus localStorage laden und beitreten (nachdem Benutzer-Einstellungen geladen sind)
 setTimeout(() => {
   const savedRoomId = localStorage.getItem("websocketDrawRoomId");
@@ -1152,7 +1204,29 @@ setTimeout(() => {
     roomIdInput.value = savedRoomId;
     console.log(`🚀 Versuche automatisch Raum ${savedRoomId} beizutreten`);
     console.log(`📋 Input-Feld nach Setzen: ${roomIdInput.value}`);
-    joinRoom();
+
+    // Stelle sicher, dass localStorage-Werte geladen sind
+    loadUserSettings();
+
+    const username = usernameInput.value.trim() || "Anonymous";
+    const userColor = userColorPicker.value;
+
+    socket.emit("join-room", {
+      roomId: savedRoomId,
+      username: username,
+      color: userColor,
+    });
+    currentRoom = savedRoomId;
+
+    // Sich selbst zur Benutzerliste hinzufügen (da Server nur andere Benutzer sendet)
+    currentUsers.set(socket.id, { username: username, color: userColor });
+    updateUserList();
+    console.log(`Sich selbst zur Benutzerliste hinzugefügt: ${username}`);
+
+    // Raum-ID im localStorage speichern
+    localStorage.setItem("websocketDrawRoomId", savedRoomId);
+    updateRoomDisplay();
+
     // URL mit Raum-ID aktualisieren
     window.history.pushState({}, "", `?room=${savedRoomId}`);
     // Zyklisches Broadcasting starten
@@ -1163,74 +1237,6 @@ setTimeout(() => {
     console.log(`⚠️ URL-Parameter überschreibt localStorage: ${roomParam}`);
   }
 }, 200); // Mehr Zeit für localStorage-Loading
-
-// Lokaler Cursor für Pinselgröße-Indikator
-let localCursor = null;
-
-function createLocalCursor() {
-  if (localCursor) return; // Bereits vorhanden
-
-  localCursor = document.createElement("div");
-  localCursor.className = "local-cursor";
-  localCursor.id = "local-cursor";
-
-  // Cursor-Icon mit Größen-Indikator
-  localCursor.innerHTML = `
-    <div class="cursor-size-indicator"></div>
-    <svg width="20" height="20" viewBox="0 0 20 20">
-      <polygon points="5,5 15,10 5,15" fill="#000" stroke="#fff" stroke-width="1"/>
-    </svg>
-  `;
-
-  document.body.appendChild(localCursor);
-  updateCursorSize(); // Initiale Größe setzen
-}
-
-function updateCursorSize() {
-  if (!localCursor) return;
-
-  const brushSize = parseInt(brushSize.value) || 5;
-  const sizeIndicator = localCursor.querySelector(".cursor-size-indicator");
-
-  // Skaliere den Größen-Indikator basierend auf der Pinselgröße
-  // Minimum 10px, Maximum 100px für gute Sichtbarkeit
-  const indicatorSize = Math.max(10, Math.min(100, brushSize * 2));
-
-  sizeIndicator.style.width = `${indicatorSize}px`;
-  sizeIndicator.style.height = `${indicatorSize}px`;
-  sizeIndicator.style.borderWidth = `${Math.max(1, brushSize / 10)}px`;
-
-  console.log(
-    `🎨 Pinselgröße aktualisiert: ${brushSize}px, Indikator: ${indicatorSize}px`
-  );
-}
-
-// Maus-Tracking für lokalen Cursor
-document.addEventListener("mousemove", (e) => {
-  if (!localCursor) return;
-
-  // Positioniere lokalen Cursor an Mausposition
-  localCursor.style.left = `${e.clientX}px`;
-  localCursor.style.top = `${e.clientY}px`;
-
-  // Zeige/verstecke Cursor basierend auf Canvas-Position
-  const canvas = document.getElementById("drawing-canvas");
-  const rect = canvas.getBoundingClientRect();
-
-  if (
-    e.clientX >= rect.left &&
-    e.clientX <= rect.right &&
-    e.clientY >= rect.top &&
-    e.clientY <= rect.bottom
-  ) {
-    localCursor.style.opacity = "1";
-  } else {
-    localCursor.style.opacity = "0.3";
-  }
-});
-
-// Lokalen Cursor erstellen
-createLocalCursor();
 
 // Initiale Brush-Einstellungen
 updateBrushSettings();
@@ -1297,6 +1303,109 @@ async function copyShareLink() {
 
 // Event Listener für Share-Funktionalität
 document.getElementById("share-link").addEventListener("click", copyShareLink);
+
+// Benutzerliste-Funktionen
+// Funktion um zu einem bestimmten Punkt zu springen
+function jumpToPosition(worldX, worldY) {
+  // Viewport zu dieser Position bewegen
+  let newOffsetX = -worldX * scale + canvas.width / 2;
+  let newOffsetY = -worldY * scale + canvas.height / 2;
+
+  // Grenzen für das Scrolling berechnen
+  const maxOffsetX = CANVAS_SIZE * scale - canvas.width / 2;
+  const minOffsetX = -CANVAS_SIZE * scale + canvas.width / 2;
+  const maxOffsetY = CANVAS_SIZE * scale - canvas.height / 2;
+  const minOffsetY = -CANVAS_SIZE * scale + canvas.height / 2;
+
+  // Offset-Werte begrenzen
+  newOffsetX = Math.max(minOffsetX, Math.min(maxOffsetX, newOffsetX));
+  newOffsetY = Math.max(minOffsetY, Math.min(maxOffsetY, newOffsetY));
+
+  // Nur aktualisieren wenn sich etwas geändert hat
+  if (newOffsetX !== offsetX || newOffsetY !== offsetY) {
+    offsetX = newOffsetX;
+    offsetY = newOffsetY;
+
+    console.log(`🔄 Springe zu Position: (${worldX}, ${worldY})`);
+    redrawCanvas();
+  }
+}
+
+// Funktion um zu einem Benutzer-Cursor zu springen
+function jumpToUserCursor(userId) {
+  const position = cursorPositions.get(userId);
+  if (position) {
+    jumpToPosition(position.x, position.y);
+    console.log(
+      `🎯 Springe zu Benutzer ${userId} bei (${position.x}, ${position.y})`
+    );
+  } else {
+    console.log(`❌ Keine Position für Benutzer ${userId} gefunden`);
+  }
+}
+
+function updateUserList() {
+  const userListElement = document.getElementById("user-list");
+  userListElement.innerHTML = ""; // Liste leeren
+
+  // Benutzer nach Namen sortieren
+  const sortedUsers = Array.from(currentUsers.entries()).sort((a, b) => {
+    const nameA = a[1].username || "Anonymous";
+    const nameB = b[1].username || "Anonymous";
+    return nameA.localeCompare(nameB);
+  });
+
+  // Für jeden Benutzer eine Blase erstellen
+  for (const [userId, userInfo] of sortedUsers) {
+    const userBubble = document.createElement("div");
+    userBubble.className = "user-bubble";
+    userBubble.style.backgroundColor = userInfo.color || "#ff6b6b";
+    userBubble.style.cursor = "pointer"; // Zeige an, dass es klickbar ist
+    userBubble.title = `Klicke um zu ${
+      userInfo.username || "Anonymous"
+    } zu springen`; // Tooltip
+
+    // Klick-Event hinzufügen
+    userBubble.addEventListener("click", () => {
+      jumpToUserCursor(userId);
+    });
+
+    // Hover-Effekte
+    userBubble.addEventListener("mouseenter", () => {
+      userBubble.style.transform = "scale(1.05)";
+      userBubble.style.boxShadow = "0 2px 8px rgba(0,0,0,0.2)";
+    });
+
+    userBubble.addEventListener("mouseleave", () => {
+      userBubble.style.transform = "scale(1)";
+      userBubble.style.boxShadow = "none";
+    });
+
+    const name = document.createElement("span");
+    name.className = "user-name";
+    name.textContent = userInfo.username || "Anonymous";
+
+    userBubble.appendChild(name);
+    userListElement.appendChild(userBubble);
+  }
+
+  console.log(`👥 Benutzerliste aktualisiert: ${currentUsers.size} Benutzer`);
+}
+
+function addUser(userId, username, color) {
+  currentUsers.set(userId, { username, color });
+  updateUserList();
+}
+
+function removeUser(userId) {
+  currentUsers.delete(userId);
+  updateUserList();
+}
+
+function clearUserList() {
+  currentUsers.clear();
+  updateUserList();
+}
 
 // Broadcasting stoppen wenn Seite verlassen wird
 window.addEventListener("beforeunload", () => {

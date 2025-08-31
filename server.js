@@ -54,25 +54,31 @@ io.on("connection", (socket) => {
       socket.emit("canvas-data", room.drawings);
     }
 
-    // Alle Benutzer-Informationen an neuen Client senden
+    // Alle ANDEREN Benutzer-Informationen an neuen Client senden
     const userInfos = {};
     for (const [userId, userInfo] of Object.entries(room.userInfo || {})) {
       if (userId !== socket.id) {
-        // Eigene Info nicht senden
+        // Eigene Info nicht senden - Client fügt sich selbst hinzu
         userInfos[userId] = userInfo;
       }
     }
-    if (Object.keys(userInfos).length > 0) {
-      socket.emit("user-infos", userInfos);
-      console.log(
-        `Benutzer-Infos an neuen Client ${socket.id} gesendet:`,
-        userInfos
-      );
-    } else {
-      console.log(
-        `Keine Benutzer-Infos für neuen Client ${socket.id} zu senden`
-      );
+    // Immer user-infos senden, auch wenn leer (für korrekte Initialisierung)
+    socket.emit("user-infos", userInfos);
+    console.log(
+      `Benutzer-Infos an neuen Client ${socket.id} gesendet:`,
+      userInfos
+    );
+
+    // Aktualisierte Benutzer-Infos an alle anderen Clients im Raum senden
+    const allUserInfos = {};
+    for (const [userId, userInfo] of Object.entries(room.userInfo || {})) {
+      allUserInfos[userId] = userInfo;
     }
+    socket.to(roomId).emit("user-infos", allUserInfos);
+    console.log(
+      `Vollständige Benutzer-Infos an alle anderen Clients in Raum ${roomId} gesendet:`,
+      allUserInfos
+    );
 
     // Neuen Benutzer an alle anderen Clients weiterleiten
     socket.to(roomId).emit("user-joined", {
@@ -186,12 +192,35 @@ io.on("connection", (socket) => {
       if (room.users.has(socket.id)) {
         room.users.delete(socket.id);
 
+        // Benutzer-Info aus room.userInfo entfernen
+        if (room.userInfo && room.userInfo[socket.id]) {
+          delete room.userInfo[socket.id];
+          console.log(
+            `Benutzer-Info für ${socket.id} aus Raum ${roomId} entfernt`
+          );
+        }
+
         // Raum leeren falls kein Benutzer mehr da ist
         if (room.users.size === 0) {
           rooms.delete(roomId);
+          console.log(`Raum ${roomId} wurde geleert und entfernt`);
         } else {
           // Anzahl der Benutzer aktualisieren
           io.to(roomId).emit("user-count", room.users.size);
+
+          // Aktualisierte Benutzer-Infos an alle verbleibenden Clients senden
+          const updatedUserInfos = {};
+          for (const [userId, userInfo] of Object.entries(
+            room.userInfo || {}
+          )) {
+            updatedUserInfos[userId] = userInfo;
+          }
+          // Immer senden, auch wenn leer (für korrekte Synchronisation)
+          io.to(roomId).emit("user-infos", updatedUserInfos);
+          console.log(
+            `Aktualisierte Benutzer-Infos an Raum ${roomId} gesendet:`,
+            updatedUserInfos
+          );
         }
       }
     }
