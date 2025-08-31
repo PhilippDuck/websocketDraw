@@ -141,7 +141,7 @@ io.on("connection", (socket) => {
     }
   });
 
-  // Benutzer-Info speichern und an andere Clients weiterleiten
+  // Benutzer-Info speichern und an alle Clients im Raum weiterleiten
   socket.on("user-info", (data) => {
     const roomId = getRoomId(socket);
     if (roomId && rooms.has(roomId)) {
@@ -157,14 +157,14 @@ io.on("connection", (socket) => {
         `Benutzer-Info gespeichert für ${socket.id}: ${data.username}, ${data.color}`
       );
 
-      // Benutzer-Info an alle anderen Clients im Raum weiterleiten
-      socket.to(roomId).emit("user-joined", {
+      // Benutzer-Info an ALLE Clients im Raum weiterleiten (inklusive Sender)
+      io.to(roomId).emit("user-info-update", {
         userId: socket.id,
         username: data.username || "Anonymous",
         color: data.color || "#ff6b6b",
       });
       console.log(
-        `Benutzer-Info an Raum ${roomId} weitergeleitet: ${data.username}`
+        `Benutzer-Info an ALLE Clients in Raum ${roomId} weitergeleitet: ${data.username}`
       );
     } else {
       console.log(`Keine Raum-ID gefunden für Benutzer-Info von ${socket.id}`);

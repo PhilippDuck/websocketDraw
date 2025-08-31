@@ -113,6 +113,7 @@ socket.on("user-count", handleUserCount);
 socket.on("cursor-update", handleCursorUpdate);
 socket.on("user-infos", handleUserInfos);
 socket.on("user-joined", handleUserJoined);
+socket.on("user-info-update", handleUserJoined); // Gleiche Behandlung wie user-joined
 socket.on("clear-canvas", handleRemoteClear);
 
 // Funktionen
@@ -123,6 +124,9 @@ function createRoom() {
 function joinRoom() {
   const roomId = roomIdInput.value.trim();
   if (roomId) {
+    // Stelle sicher, dass localStorage-Werte geladen sind
+    loadUserSettings();
+
     const username = usernameInput.value.trim() || "Anonymous";
     const userColor = userColorPicker.value;
 
@@ -151,6 +155,9 @@ function joinRoom() {
 
 function handleRoomCreated(roomId) {
   currentRoom = roomId;
+  // Stelle sicher, dass localStorage-Werte geladen sind
+  loadUserSettings();
+
   const username = usernameInput.value.trim() || "Anonymous";
   const userColor = userColorPicker.value;
 
@@ -841,8 +848,29 @@ userColorPicker.addEventListener("change", () => {
 
 // Benutzer-Info an Server senden
 function sendUserInfo() {
-  const username = usernameInput.value.trim() || "Anonymous";
-  const userColor = userColorPicker.value;
+  // Lade Werte aus localStorage falls Input-Felder leer sind
+  let username = usernameInput.value.trim();
+  let userColor = userColorPicker.value;
+
+  if (!username || username === "Anonymous") {
+    const savedUsername = localStorage.getItem("websocketDrawUsername");
+    if (savedUsername) {
+      username = savedUsername;
+      usernameInput.value = savedUsername; // Input-Feld aktualisieren
+    } else {
+      username = "Anonymous";
+    }
+  }
+
+  if (!userColor || userColor === "#ff6b6b") {
+    const savedUserColor = localStorage.getItem("websocketDrawUserColor");
+    if (savedUserColor) {
+      userColor = savedUserColor;
+      userColorPicker.value = savedUserColor; // Input-Feld aktualisieren
+    } else {
+      userColor = "#ff6b6b";
+    }
+  }
 
   socket.emit("user-info", {
     username: username,
@@ -858,6 +886,8 @@ joinRoom = function () {
   originalJoinRoom();
   // Benutzer-Info sofort senden
   sendUserInfo();
+  // Zyklisches Broadcasting starten
+  startUserInfoBroadcast();
 };
 
 // Raum erstellen mit Benutzer-Info
@@ -866,6 +896,8 @@ handleRoomCreated = function (roomId) {
   originalHandleRoomCreated(roomId);
   // Benutzer-Info sofort senden
   sendUserInfo();
+  // Zyklisches Broadcasting starten
+  startUserInfoBroadcast();
 };
 
 // Cursor-Update mit Benutzer-Info
@@ -963,6 +995,29 @@ function handleCursorUpdate(data) {
   );
 }
 
+// Zyklisches Update für Benutzer-Infos
+let userInfoInterval = null;
+
+function startUserInfoBroadcast() {
+  if (userInfoInterval) {
+    clearInterval(userInfoInterval);
+  }
+  userInfoInterval = setInterval(() => {
+    if (currentRoom) {
+      console.log("🔄 Broadcasting user info...");
+      sendUserInfo();
+    }
+  }, 10000); // Alle 10 Sekunden
+  console.log("✅ User info broadcasting started");
+}
+
+function stopUserInfoBroadcast() {
+  if (userInfoInterval) {
+    clearInterval(userInfoInterval);
+    userInfoInterval = null;
+  }
+}
+
 // Benutzer-Einstellungen beim Start laden
 loadUserSettings();
 
@@ -978,6 +1033,10 @@ setTimeout(() => {
     console.log(`🚀 Versuche automatisch Raum ${savedRoomId} beizutreten`);
     console.log(`📋 Input-Feld nach Setzen: ${roomIdInput.value}`);
     joinRoom();
+    // URL mit Raum-ID aktualisieren
+    window.history.pushState({}, "", `?room=${savedRoomId}`);
+    // Zyklisches Broadcasting starten
+    startUserInfoBroadcast();
   } else if (!savedRoomId) {
     console.log("❌ Keine gespeicherte Raum-ID gefunden");
   } else if (roomParam) {
@@ -987,3 +1046,8 @@ setTimeout(() => {
 
 // Initiale Brush-Einstellungen
 updateBrushSettings();
+
+// Broadcasting stoppen wenn Seite verlassen wird
+window.addEventListener("beforeunload", () => {
+  stopUserInfoBroadcast();
+});
